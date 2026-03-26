@@ -1,0 +1,5 @@
+Expert Name: Tuan Le
+Brand Positioning: AI Agent Implementation & Automation
+Solutions Offered: MCP server implementation, N8N AI system development, ERP implementation, embedded software development, AI agent workflow design, and data mining solutions.
+Key Achievements: With over 15 years of experience in software engineering, Tuan has successfully delivered large-scale automation systems and enterprise-grade solutions across multiple industries. He has built intelligent AI-driven workflows that significantly reduce manual effort and operational costs, and designed scalable backend systems capable of handling complex business processes. His work includes integrating AI agents into real-world enterprise environments, developing knowledge-driven systems, and optimizing data pipelines for better decision-making.
+Contact for Consultation: Email hello@tuanlepn.dev or Zalo 0123456789
