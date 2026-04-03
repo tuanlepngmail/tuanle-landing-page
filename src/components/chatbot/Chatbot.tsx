@@ -24,6 +24,9 @@ export function Chatbot() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+  
+  // Khởi tạo một web_session ID bất kỳ cho lượt chat mới
+  const sessionIdRef = useRef<string>("web_ses_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6));
 
   useEffect(() => {
     // Tải Knowledge Base ngay lúc mount
@@ -84,6 +87,10 @@ Ví dụ:
   const handleRefresh = () => {
     setIsRefreshing(true);
     setMessages([]);
+    
+    // Đổi Session ID mới vì coi như là một cuộc trò chuyện hoàn toàn mới
+    sessionIdRef.current = "web_ses_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6);
+
     setTimeout(() => {
       setMessages([{ id: `msg-${Date.now()}`, sender: "ai", text: INITIAL_GREETING }]);
       setIsRefreshing(false);
@@ -113,11 +120,11 @@ Ví dụ:
         }))
       ];
 
-      // 3. Gọi API LLM custom
+      // 3. Gọi API LLM custom kèm sessionId
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, sessionId: sessionIdRef.current }),
       });
 
       const data = await res.json();

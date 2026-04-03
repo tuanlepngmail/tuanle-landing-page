@@ -22,7 +22,7 @@ const SPREADSHEET_ID = "15FFrBeHye-Jz6J_ASPsDtrleIs_rUqDVbEIf182ZHbQ";
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, sessionId } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages array." }, { status: 400 });
@@ -51,40 +51,79 @@ export async function POST(req: Request) {
       }
     }
 
-    // ----------- GHI VÀO GOOGLE SHEETS -----------
-    if (leadData) {
-      // Nối toàn bộ lịch sử tin nhắn để lưu vào cột Conversation
-      const conversationHistory = messages.map(m => `${m.role === 'user' ? 'Khách' : 'Bot'}: ${m.content}`).join("\n");
-      const endTime = new Date().toISOString(); 
-      // Do không có session fix sẵn từ client truyền lên, tạm dùng thời gian hiện tại
-      const sessionId = "Web_" + Date.now(); 
+    // ----------- GHI VÀO MỘT DÒNG DUY NHẤT (UPSERT) TRÊN GOOGLE SHEETS -----------
+    const conversationHistory = messages.map((m: any) => `${m.role === 'user' ? 'Khách' : 'Bot'}: ${m.content}`).join("\n");
+    const endTime = new Date().toISOString(); 
+    const currentSessionId = sessionId || "Web_" + Date.now(); 
+    
+    try {
+      // 1. TỐI ƯU: Chỉ kéo về duy nhất cột B (SessionID) thay vì kéo cả bảng. Data vài chục KB dù có hàng vạn dòng!
+      const sessionIdColumn = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "Conversations!B:B"
+      });
       
-      try {
-        await sheets.spreadsheets.values.append({
+      const rows = sessionIdColumn.data.values || [];
+      const existingRowIndex = rows.findIndex(row => row[0] === currentSessionId);
+      
+      if (existingRowIndex !== -1) {
+        // --- NẾU ĐÃ CÓ: GHI ĐÈ / CẬP NHẬT ---
+        const updateRowNumber = existingRowIndex + 1; // Google Sheet index từ 1
+        
+        // Cực kì nhẹ: Chỉ kéo mỗi data của cái dòng cần ghi đè về (Ví dụ: kéo dòng 15)
+        const rowDataRaw = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: "Conversations!A:J", // Thay đổi sheet range thành Conversations
+          range: `Conversations!A${updateRowNumber}:J${updateRowNumber}`
+        });
+        const existingRow = rowDataRaw.data.values?.[0] || [];
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `Conversations!A${updateRowNumber}:J${updateRowNumber}`,
           valueInputOption: "USER_ENTERED",
           requestBody: {
             values: [
-               [
-                 "landing-page-chatbot",     // Source
-                 sessionId,                  // SessionID
-                 endTime,                    // StartTime (Tạm gán bằng EndTime trừ khi bạn gửi StartTime từ Client lên)
-                 endTime,                    // EndTime
-                 leadData.name || "",        // Name
-                 leadData.phone || "",       // Phone
-                 leadData.email || "",       // Email
-                 leadData.interest || "",    // Interest
-                 leadData.intent_level || "",// Intent_Level
-                 conversationHistory         // Conversation
-               ]
+                [
+                  existingRow[0] || "landing-page-chatbot", // Source
+                  currentSessionId,                         // SessionID
+                  existingRow[2] || endTime,                // StartTime (Giữ cấu trúc cũ)
+                  endTime,                                  // EndTime (Update lại mỗi khi chat)
+                  leadData?.name || existingRow[4] || "",   // Xài dữ liệu mới nếu có, không có thì giữ cũ
+                  leadData?.phone || existingRow[5] || "",
+                  leadData?.email || existingRow[6] || "",
+                  leadData?.interest || existingRow[7] || "",
+                  leadData?.intent_level || existingRow[8] || "",
+                  conversationHistory                       // Cập nhật cục lịch sử mới dài hơn
+                ]
             ]
           }
         });
-        console.log("Đã ghi thông tin Lead vào Google Sheets!");
-      } catch (e) {
-         console.error("Lỗi khi ghi Google Sheets:", e);
+      } else {
+        // --- NẾU CHƯA CÓ DÒNG TƯƠNG ỨNG: THÊM DÒNG MỚI ---
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: "Conversations!A:J",
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [
+                [
+                  "landing-page-chatbot",     // Source
+                  currentSessionId,           // SessionID
+                  endTime,                    // StartTime
+                  endTime,                    // EndTime
+                  leadData?.name || "",       // Name
+                  leadData?.phone || "",      // Phone
+                  leadData?.email || "",      // Email
+                  leadData?.interest || "",   // Interest
+                  leadData?.intent_level || "",// Intent_Level
+                  conversationHistory         // Lịch sử Conversation ngay lúc này
+                ]
+            ]
+          }
+        });
       }
+    } catch (e) {
+        console.error("Lỗi khi ghi Google Sheets:", e);
     }
 
     return NextResponse.json({ reply });
